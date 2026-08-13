@@ -5,14 +5,13 @@ export default async (req: Request, res: Response) => {
   const { step_run_id } = req.body.input
   const userId = (req.headers['x-hasura-user-id'] as string) || '11111111-1111-1111-1111-111111111111'
   const client = new Client({
-    host: 'bhlvcppwdduecuciuxjj.db.eu-central-1.nhost.run',
+    host: process.env.PGHOST,
     port: 5432,
     user: 'postgres',
-    password: 'fBMYWGjXcumZX3fW',
-    database: 'bhlvcppwdduecuciuxjj',
+    password: process.env.PGPASSWORD,
+    database: process.env.PGDATABASE,
     ssl: { rejectUnauthorized: false }
   })
-
   try {
     await client.connect()
 
