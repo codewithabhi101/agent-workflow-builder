@@ -116,8 +116,9 @@ export default async (req: Request, res: Response) => {
     await client.query(`UPDATE organizations SET quota_used = quota_used + 1 WHERE id = $1`, [orgId])
 
     return res.json({ run_id: runId, status: 'completed' })
-  } catch (err: any) {
-    return res.status(500).json({ message: err.message })
+ } catch (err: any) {
+    console.error('FULL ERROR:', err)
+    return res.status(500).json({ message: err.message, code: err.code, detail: err.detail })
   } finally {
     await client.end()
   }
