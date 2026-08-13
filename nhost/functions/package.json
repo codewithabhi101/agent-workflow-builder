@@ -4,12 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "node dist/server.cjs",
-    "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "test": "tsx server/test-runner.ts",
+    "dev": "echo \"Nhost functions are deployed/run by Nhost\"",
+    "build": "echo \"Nhost functions do not require a single server build\"",
+    "test": "echo \"No tests configured yet\"",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
@@ -22,7 +19,8 @@
     "vite": "^6.2.3",
     "express": "^4.21.2",
     "dotenv": "^17.2.3",
-    "motion": "^12.23.24"
+    "motion": "^12.23.24",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
@@ -32,6 +30,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "@types/pg": "^8.11.10"
   }
 }
