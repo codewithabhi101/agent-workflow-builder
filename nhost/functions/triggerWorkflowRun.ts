@@ -3,12 +3,14 @@ import { Client } from 'pg'
 
 export default async (req: Request, res: Response) => {
   const { workflow_id } = req.body.input
+  const userId = (req.headers['x-hasura-user-id'] as string) || '11111111-1111-1111-1111-111111111111'
   console.log('USING userId:', userId)
+
   const client = new Client({
     host: 'bhlvcppwdduecuciuxjj.db.eu-central-1.nhost.run',
     port: 5432,
     user: 'postgres',
-    password: 'fBMYWGjXcumZX3fW',
+    password: '5zsJSCyEQ5eptVRy',
     database: 'bhlvcppwdduecuciuxjj',
     ssl: { rejectUnauthorized: false }
   })
@@ -116,7 +118,7 @@ export default async (req: Request, res: Response) => {
     await client.query(`UPDATE organizations SET quota_used = quota_used + 1 WHERE id = $1`, [orgId])
 
     return res.json({ run_id: runId, status: 'completed' })
- } catch (err: any) {
+  } catch (err: any) {
     console.error('FULL ERROR:', err)
     return res.status(500).json({ message: err.message, code: err.code, detail: err.detail })
   } finally {
