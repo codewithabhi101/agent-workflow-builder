@@ -5,6 +5,7 @@ export default async (req: Request, res: Response) => {
   const { workflow_id } = req.body.input
   const userId = req.headers['x-hasura-user-id'] as string
   const client = new Client({ connectionString: process.env.PG_DATABASE_URL })
+  console.log('DB URL exists:', !!process.env.PG_DATABASE_URL, 'length:', (process.env.PG_DATABASE_URL || '').length)
 
   try {
     await client.connect()
