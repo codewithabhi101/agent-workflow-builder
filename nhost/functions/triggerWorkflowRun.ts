@@ -3,9 +3,8 @@ import { Client } from 'pg'
 
 export default async (req: Request, res: Response) => {
   const { workflow_id } = req.body.input
-  const userId = (req.headers['x-hasura-user-id'] as string) || '11111111-1111-1111-1111-111111111111'
-  console.log('USING userId:', userId)
-
+  const userId = req.body.session_variables?.['x-hasura-user-id'] || (req.headers['x-hasura-user-id'] as string)
+  console.log('USING userId:', userId, 'from body:', req.body.session_variables)
 const client = new Client({
   host: process.env.PGHOST,
   port: 5432,
