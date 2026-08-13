@@ -106,10 +106,32 @@ export async function runWorkflow(orgId: string, workflowId: string, startedBy: 
     await client.end()
   }
 }
-
 async function callLLM(config: any) {
-  await new Promise((r) => setTimeout(r, 800))
-  return { text: 'stubbed LLM response for prompt: ' + (config.prompt || '') }
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: config.system_prompt || 'You are a helpful assistant.' },
+        { role: 'user', content: config.prompt || config.user_prompt || 'Analyze this.' }
+      ],
+      temperature: config.temperature ?? 0.7,
+      max_tokens: config.max_tokens ?? 500
+    })
+  })
+
+  if (!response.ok) {
+    const errText = await response.text()
+    throw new Error('LLM API failed: ' + errText)
+  }
+
+  const data = await response.json()
+  const text = data.choices?.[0]?.message?.content || ''
+  return { text }
 }
 
 async function callHttp(config: any) {
