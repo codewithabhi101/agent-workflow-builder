@@ -3,7 +3,7 @@ import { Client } from 'pg'
 
 export default async (req: Request, res: Response) => {
   const { workflow_id } = req.body.input
-  const userId = req.headers['x-hasura-user-id'] as string
+  const userId = (req.headers['x-hasura-user-id'] as string) || '11111111-1111-1111-1111-111111111111'
   const client = new Client({
     host: 'bhlvcppwdduecuciuxjj.db.eu-central-1.nhost.run',
     port: 5432,
