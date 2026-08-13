@@ -7,6 +7,8 @@ A mini n8n purpose-built for chaining AI agent steps, built on nhost (Postgres +
 **Frontend repo:** `workflow-frontend` (git submodule)
 
 ## Stack
+liore
+
 
 - nhost (Postgres + Hasura GraphQL Engine + Auth + Functions)
 - PostgreSQL
