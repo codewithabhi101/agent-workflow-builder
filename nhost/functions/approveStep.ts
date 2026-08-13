@@ -8,8 +8,8 @@ export default async (req: Request, res: Response) => {
     host: 'bhlvcppwdduecuciuxjj.db.eu-central-1.nhost.run',
     port: 5432,
     user: 'postgres',
-    password: '5zsJSCyEQ5eptVRy',
-    database: 'postgres',
+    password: 'fBMYWGjXcumZX3fW',
+    database: 'bhlvcppwdduecuciuxjj',
     ssl: { rejectUnauthorized: false }
   })
 
