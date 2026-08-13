@@ -9,7 +9,7 @@ export default async (req: Request, res: Response) => {
     port: 5432,
     user: 'postgres',
     password: '5zsJSCyEQ5eptVRy',
-    database: 'postgres',
+    database: 'bhlvcppwdduecuciuxjj',
     ssl: { rejectUnauthorized: false }
   })
 
