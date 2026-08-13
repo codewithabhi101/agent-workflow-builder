@@ -90,8 +90,15 @@ export default async (req: Request, res: Response) => {
             output = { saved: true }
           } else if (step.type === 'notify') {
             output = { notified: true }
-          } else if (step.type === 'conditional_branch') {
-            output = { branch: 'default' }
+   } else if (step.type === 'conditional_branch') {
+            const prevOutput = output
+            const condition = step.config?.condition || 'success'
+            const lastText = (prevOutput && prevOutput.text) ? prevOutput.text.toLowerCase() : ''
+            if (lastText.includes(condition.toLowerCase())) {
+              output = { branch: 'true_path', matched: condition }
+            } else {
+              output = { branch: 'false_path', matched: condition }
+            }
           }
           success = true
         } catch (err: any) {
