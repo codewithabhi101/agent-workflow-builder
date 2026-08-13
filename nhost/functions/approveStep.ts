@@ -3,7 +3,7 @@ import { Client } from 'pg'
 
 export default async (req: Request, res: Response) => {
   const { step_run_id } = req.body.input
-  const userId = (req.headers['x-hasura-user-id'] as string) || '11111111-1111-1111-1111-111111111111'
+  const userId = req.body.session_variables?.['x-hasura-user-id'] || (req.headers['x-hasura-user-id'] as string)
   const client = new Client({
     host: process.env.PGHOST,
     port: 5432,
