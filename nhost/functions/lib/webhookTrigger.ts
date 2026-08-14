@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { Client } from 'pg'
-import { runWorkflow } from './lib/runWorkflow.js'
+import { runWorkflow } from './runWorkflow.js'
 
 export default async (req: Request, res: Response) => {
   const { workflow_id } = req.params

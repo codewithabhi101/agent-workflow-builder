@@ -2,7 +2,7 @@
   "name": "react-example",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
+ 
   "scripts": {
     "dev": "echo \"Nhost functions are deployed/run by Nhost\"",
     "build": "echo \"Nhost functions do not require a single server build\"",
