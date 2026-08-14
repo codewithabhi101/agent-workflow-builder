@@ -147,7 +147,7 @@ class DatabaseStore {
         title: 'HTTP Webhook Sync',
         config: {
           method: 'POST',
-          url: 'https://httpbin.org/post',
+          url: 'https://postman-echo.com/post',
           headers: { 'Content-Type': 'application/json', 'X-Workflow-Source': 'agent-builder-v1' },
           body: { sync_target: 'enterprise_crm_pipeline', priority: 'HIGH' },
           timeout_ms: 5000,
