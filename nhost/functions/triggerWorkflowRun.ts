@@ -36,6 +36,16 @@ export default async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Insufficient role to trigger runs' })
     }
 
+    // --- quota check (was missing) ---
+    const orgResult = await client.query(
+      `SELECT quota_used, quota_limit FROM organizations WHERE id = $1`,
+      [orgId]
+    )
+    const { quota_used, quota_limit } = orgResult.rows[0]
+    if (quota_used >= quota_limit) {
+      return res.status(429).json({ message: 'Org usage quota exhausted for this period' })
+    }
+
     await client.end()
 
     const result = await runWorkflow(orgId, workflow_id, userId)

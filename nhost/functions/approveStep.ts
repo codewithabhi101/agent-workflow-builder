@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import { Client } from 'pg'
+import { resumeWorkflowAfterApproval } from './lib/runWorkflow.js'
 
 export default async (req: Request, res: Response) => {
   const { step_run_id } = req.body.input
@@ -12,12 +13,14 @@ export default async (req: Request, res: Response) => {
     database: process.env.PGDATABASE,
     ssl: { rejectUnauthorized: false }
   })
+  let clientClosed = false
   try {
     await client.connect()
 
     const stepRunResult = await client.query(
-      `SELECT sr.id, sr.workflow_run_id, sr.step_id, wr.workflow_id
+      `SELECT sr.id, sr.status, sr.workflow_run_id, ws.step_order, ws.type, wr.workflow_id
        FROM step_runs sr
+       JOIN workflow_steps ws ON ws.id = sr.step_id
        JOIN workflow_runs wr ON wr.id = sr.workflow_run_id
        WHERE sr.id = $1`,
       [step_run_id]
@@ -25,7 +28,15 @@ export default async (req: Request, res: Response) => {
     if (stepRunResult.rows.length === 0) {
       return res.status(400).json({ message: 'Step run not found' })
     }
-    const { workflow_run_id, workflow_id } = stepRunResult.rows[0]
+    const { status, workflow_run_id, step_order, type, workflow_id } = stepRunResult.rows[0]
+
+    // --- validate this is actually a paused approval_gate (was missing) ---
+    if (type !== 'approval_gate') {
+      return res.status(400).json({ message: 'This step is not an approval_gate' })
+    }
+    if (status !== 'paused') {
+      return res.status(400).json({ message: `Step is not awaiting approval (current status: ${status})` })
+    }
 
     const wfResult = await client.query(`SELECT org_id FROM workflows WHERE id = $1`, [workflow_id])
     const orgId = wfResult.rows[0].org_id
@@ -46,12 +57,18 @@ export default async (req: Request, res: Response) => {
       `UPDATE step_runs SET status = 'completed', approved_by = $1, approved_at = now() WHERE id = $2`,
       [userId, step_run_id]
     )
-    await client.query(`UPDATE workflow_runs SET status = 'running' WHERE id = $1`, [workflow_run_id])
 
-    return res.json({ step_run_id, status: 'resumed' })
+    await client.end()
+    clientClosed = true
+
+    // actually resume execution from the next step (was missing)
+    const result = await resumeWorkflowAfterApproval(orgId, workflow_id, workflow_run_id, step_order + 1)
+    return res.status(result.status).json({ step_run_id, ...result.body })
   } catch (err: any) {
     return res.status(500).json({ message: err.message })
   } finally {
-    await client.end()
+    if (!clientClosed) {
+      try { await client.end() } catch {}
+    }
   }
 }
