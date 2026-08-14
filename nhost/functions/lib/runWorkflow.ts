@@ -77,9 +77,9 @@ export async function runWorkflow(orgId: string, workflowId: string, userId: str
 
     if (!runId) {
       const runResult = await client.query(
-        `INSERT INTO workflow_runs (workflow_id, org_id, status, triggered_by, current_step_order)
-         VALUES ($1, $2, 'running', $3, 0) RETURNING id`,
-        [workflowId, orgId, userId]
+        `INSERT INTO workflow_runs (workflow_id, status, started_by)
+         VALUES ($1, 'running', $2) RETURNING id`,
+        [workflowId, userId]
       )
       runId = runResult.rows[0].id
     } else {
@@ -88,13 +88,9 @@ export async function runWorkflow(orgId: string, workflowId: string, userId: str
 
     let previousOutput: any = null
 
-    // FIX: find the first step whose step_order is >= fromStepOrder,
-    // instead of requiring an exact match. If none found, the workflow
-    // is already past its last step — treat as complete instead of
-    // silently restarting from 0.
     let i = steps.findIndex((s: any) => s.step_order >= fromStepOrder)
     if (i === -1) {
-      await client.query(`UPDATE workflow_runs SET status = 'completed', completed_at = now() WHERE id = $1`, [runId])
+      await client.query(`UPDATE workflow_runs SET status = 'completed', finished_at = now() WHERE id = $1`, [runId])
       await client.query(`UPDATE organizations SET quota_used = quota_used + 1 WHERE id = $1`, [orgId])
       return { status: 200, body: { workflow_run_id: runId, status: 'completed' } }
     }
@@ -103,13 +99,11 @@ export async function runWorkflow(orgId: string, workflowId: string, userId: str
       const step = steps[i]
 
       const stepRunResult = await client.query(
-        `INSERT INTO step_runs (workflow_run_id, step_id, status, input, started_at)
+        `INSERT INTO step_runs (workflow_run_id, step_id, status, input, created_at)
          VALUES ($1, $2, 'running', $3, now()) RETURNING id`,
         [runId, step.id, JSON.stringify(previousOutput)]
       )
       const stepRunId = stepRunResult.rows[0].id
-
-      await client.query(`UPDATE workflow_runs SET current_step_order = $1 WHERE id = $2`, [step.step_order, runId])
 
       if (step.type === 'approval_gate') {
         await client.query(`UPDATE step_runs SET status = 'paused' WHERE id = $1`, [stepRunId])
@@ -124,7 +118,7 @@ export async function runWorkflow(orgId: string, workflowId: string, userId: str
         const nextOrder = matched ? step.config.on_true_step_order : step.config.on_false_step_order
 
         await client.query(
-          `UPDATE step_runs SET status = 'completed', output = $1, completed_at = now() WHERE id = $2`,
+          `UPDATE step_runs SET status = 'completed', output = $1 WHERE id = $2`,
           [JSON.stringify({ matched, nextOrder }), stepRunId]
         )
         previousOutput = { matched }
@@ -162,15 +156,15 @@ export async function runWorkflow(orgId: string, workflowId: string, userId: str
 
       if (execResult.error) {
         await client.query(
-          `UPDATE step_runs SET status = 'failed', error = $1, attempt_count = $2, completed_at = now() WHERE id = $3`,
+          `UPDATE step_runs SET status = 'failed', error = $1, attempt_count = $2 WHERE id = $3`,
           [execResult.error, execResult.attempts, stepRunId]
         )
-        await client.query(`UPDATE workflow_runs SET status = 'failed', error = $1 WHERE id = $2`, [execResult.error, runId])
+        await client.query(`UPDATE workflow_runs SET status = 'failed' WHERE id = $1`, [runId])
         return { status: 500, body: { workflow_run_id: runId, status: 'failed', error: execResult.error } }
       }
 
       await client.query(
-        `UPDATE step_runs SET status = 'completed', output = $1, attempt_count = $2, completed_at = now() WHERE id = $3`,
+        `UPDATE step_runs SET status = 'completed', output = $1, attempt_count = $2 WHERE id = $3`,
         [JSON.stringify(execResult.result), execResult.attempts, stepRunId]
       )
       previousOutput = typeof execResult.result === 'string' ? { result: execResult.result } : execResult.result
@@ -178,17 +172,14 @@ export async function runWorkflow(orgId: string, workflowId: string, userId: str
       i++
     }
 
-    await client.query(`UPDATE workflow_runs SET status = 'completed', completed_at = now() WHERE id = $1`, [runId])
+    await client.query(`UPDATE workflow_runs SET status = 'completed', finished_at = now() WHERE id = $1`, [runId])
     await client.query(`UPDATE organizations SET quota_used = quota_used + 1 WHERE id = $1`, [orgId])
 
     return { status: 200, body: { workflow_run_id: runId, status: 'completed' } }
   } catch (err: any) {
-    // FIX: any unexpected error (DB hiccup, bad config, etc.) now
-    // marks the run as failed instead of leaving it stuck at 'running'
-    // forever with no error and no completed_at.
     if (runId) {
       try {
-        await client.query(`UPDATE workflow_runs SET status = 'failed', error = $1 WHERE id = $2`, [err.message, runId])
+        await client.query(`UPDATE workflow_runs SET status = 'failed' WHERE id = $1`, [runId])
       } catch { /* best effort */ }
     }
     return { status: 500, body: { workflow_run_id: runId, status: 'failed', error: err.message } }
