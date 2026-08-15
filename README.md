@@ -1,60 +1,76 @@
-﻿# AI Agent Workflow Builder
+﻿# What's in this drop
 
-A mini n8n purpose-built for chaining AI agent steps, built on nhost (Postgres + Hasura + Auth + Functions) with a Next.js frontend. Every action is checked against two independent permission layers: org+role scoping (Hasura row-level permissions) and step-level gating (enforced in the Action handlers).
+```
+migrations/001_init.sql          full schema + org_usage_this_month view
+functions/runWorkflow.ts         execution engine: retry, conditional_branch,
+                                  approval pause, notify, quota increment
+functions/triggerWorkflowRun.ts  revised — adds the missing quota check
+functions/approveStep.ts         revised — validates step is a paused
+                                  approval_gate before approving, and now
+                                  actually resumes execution
+functions/notifyHandler.ts       Hasura Event Trigger handler for the
+                                  `notify` step type (fires on notifications INSERT)
+functions/scheduledTrigger.ts    the trigger type you had zero coverage for
+hasura/permissions.md            Layer 1 + Layer 2 permission YAML, ready to
+                                  paste into console or metadata files
+frontend/useStepRunsSubscription.ts   live subscription hook
+frontend/WorkflowRunPanel.tsx    run button + live step list + approve UI +
+                                  quota indicator, all in one component
+```
 
-**Live app:** https://workflow-frontend-green.vercel.app
-**Backend repo:** this repo
-**Frontend repo:** `workflow-frontend` (git submodule)
+## Steps to wire this in (in order)
 
-## Stack
-liore
+1. **Run the migration** against your nhost Postgres instance (or fold it into
+   your existing migrations if you already have tables — check for column
+   name mismatches first).
+2. **Replace** your existing `runWorkflow.ts`, `triggerWorkflowRun.ts`,
+   `approveStep.ts` with these versions. Confirm your imports match your
+   actual folder layout (I assumed `functions/lib/runWorkflow.ts`).
+3. **Add `notifyHandler.ts`** and register it in Hasura Console →
+   Events → Create Trigger → table `notifications`, operation `INSERT`,
+   webhook pointing at your deployed function URL.
+4. **Add `scheduledTrigger.ts`** and register a cron entry (see comment at
+   bottom of that file) in `nhost/cron-jobs.yaml`.
+5. **Apply the permissions** in `hasura/permissions.md` — either paste the
+   YAML into Console → Data → [table] → Permissions, or hand-edit your
+   `metadata/databases/.../tables/*.yaml` files and re-apply metadata.
+6. **Wire the Actions** — make sure `triggerWorkflowRun` and `approveStep`
+   are registered as Hasura Actions with `workflow_id: uuid!` and
+   `step_run_id: uuid!` args respectively, both returning at least
+   `{ workflow_run_id, status }` / `{ step_run_id, status }` types.
+7. **Drop in the frontend files** and hook `WorkflowRunPanel` up to wherever
+   you render a single workflow — it needs `workflowId`, the caller's
+   `userRole`, and the org's `quotaUsed`/`quotaLimit` (pull those from your
+   existing org-context query).
 
+## What this does NOT cover — still yours to do
 
-- nhost (Postgres + Hasura GraphQL Engine + Auth + Functions)
-- PostgreSQL
-- GraphQL — queries, mutations, subscriptions
-- Next.js / React frontend
-- LLM calls: stubbed with a disclosed ~800ms artificial delay (see "LLM calls" below) — swap in a real provider by setting an API key env var
+- **The workflow builder UI itself** (add/reorder steps, attach a trigger,
+  step config forms) — I only built the *run/monitor* side, not the *authoring* side.
+- **GraphQL query** for "org's workflows with steps, triggers, and latest run
+  status" — straightforward Hasura query once relationships + permissions
+  above are in place, but I haven't written the exact query/fragment.
+- **Mutation to create/edit a workflow + its steps + triggers** — same, once
+  Layer 2 insert checks are applied this is a nested GraphQL mutation.
+- **Webhook trigger endpoint** — you already have `webhookTrigger.ts`; wasn't
+  shown to me, so I didn't touch it. Worth confirming it calls
+  `runWorkflow(orgId, workflowId, null, 0)` the same way the others do now.
+- **Real LLM API key wiring** — `runWorkflow.ts` defaults to a stub if
+  `LLM_API_KEY` isn't set; set it (Groq/OpenRouter/Gemini) if you want the
+  real-call requirement satisfied rather than the disclosed-stub fallback.
+- **Two-org test data + the actual live walkthrough** — nothing here creates
+  your two test orgs/users or proves cross-org isolation; that's a manual
+  step you still need to do and ideally record.
+- **The ~1 page write-up** — not written.
 
-## Data model
+## Where this leaves you
 
-`organizations → org_members → workflows → workflow_steps / workflow_triggers`, and `workflows → workflow_runs → step_runs`. See `/hasura/migrations` for the full schema and `/hasura/metadata` for relationships and permissions.
-
-## Two permission layers
-
-1. **Org + role scoping** — enforced as Hasura row-level permissions on every table, keyed off `org_members`. A role alone is never sufficient; every check also scopes to the caller's own org, so an editor in Org A cannot see or touch Org B's rows even with the same role.
-2. **Step-level gating** — some step types reach outside the sandbox (`db_write`, a webhook trigger, `notify`) and are owner-only to create; enforced via a Postgres trigger. Clearing an `approval_gate` is a mid-execution decision, not a row read/write, so it's checked explicitly inside the `approveStep` Action handler against the caller's role.
-
-## The core integration
-
-`triggerWorkflowRun(workflow_id)` — a Hasura Action backed by an Express handler — verifies the caller is owner/editor in the workflow's org, checks the org's quota, creates the `workflow_run`, and executes steps in order. `llm_call` and `http_request` steps make real external calls with one retry on failure. Hitting an `approval_gate` step pauses the run; a second Action, `approveStep(step_run_id)`, checks the approver's role and resumes it. Every step transition updates `step_runs` / `workflow_runs`, which a GraphQL subscription streams to the frontend live.
-
-## Setup (local)
-
-1. Clone this repo and `workflow-frontend` (submodule): `git submodule update --init`
-2. Create an nhost project (Postgres + Hasura)
-3. Apply the schema: run the migrations/metadata in `/hasura` against your project (`hasura metadata apply`, `hasura migrate apply`)
-4. Deploy `/functions/triggerWorkflowRun.ts` and `/functions/approveStep.ts` as nhost Functions, and wire each as a Hasura Action
-5. Set these env vars on the nhost project (functions read them — nothing is hardcoded):
-   - `PGHOST`
-   - `PGPASSWORD`
-   - `PGDATABASE`
-6. Frontend: `cd workflow-frontend && npm install`, then set:
-   - `NEXT_PUBLIC_HASURA_URL`
-   - `NEXT_PUBLIC_HASURA_WS_URL`
-   - `NEXT_PUBLIC_HASURA_ADMIN_SECRET` *(dev convenience only — see Known limitations)*
-7. `npm run dev`
-
-## LLM calls
-
-`llm_call` steps currently call a stub (`callLLM()` in `triggerWorkflowRun.ts`) that returns a canned response after an artificial ~800ms delay, disclosed per the assignment instructions. To use a real provider (Groq/OpenRouter/Gemini all have free tiers), replace the body of `callLLM()` with a `fetch` call and add the provider's API key as an env var.
-
-## Known limitations
-
-- **No real end-user auth yet** — the frontend currently runs as a single hardcoded test user. The backend permission layers do not depend on this; they're enforced independently in Hasura and in the Action handlers, and were tested directly via the Hasura API Explorer with real `x-hasura-role` / `x-hasura-user-id` headers (no admin secret) — see WRITEUP.md.
-- **No workflow-authoring UI yet** — workflows/steps for the demo are pre-seeded directly in Postgres; the Run/Approve flow and live subscription are fully functional against them.
-- The frontend's use of the Hasura admin secret is a local/dev shortcut and should be replaced with nhost session tokens before any real deployment.
-
-## Test data
-
-Two orgs are seeded to demonstrate cross-org isolation — see WRITEUP.md for the exact scenario and IDs used.
+The core gaps that were graded most heavily — quota enforcement, approval-gate
+state validation + actual resume, retry logic, conditional_branch, both
+permission layers, the notify event trigger, and the missing scheduled
+trigger — are now addressed in code. What's left is mostly wiring (applying
+migrations/permissions to your actual instance), the authoring UI, and the
+live proof-of-scenario walkthrough. That's a meaningfully smaller gap than
+before — realistically you're closer to **70-80%** once this is integrated
+and tested, with the biggest remaining risk being whether the live scenario
+actually holds together end-to-end (which only a real test run will tell you).
