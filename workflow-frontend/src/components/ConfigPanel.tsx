@@ -21,6 +21,7 @@ interface ConfigPanelProps {
   isOpen: boolean;
   onClose: () => void;
   onInspectJson: (data: any) => void;
+  
 }
 
 const STEP_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
