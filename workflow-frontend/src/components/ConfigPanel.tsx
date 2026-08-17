@@ -13,6 +13,7 @@ import {
   Bell,
   X,
   Copy,
+  RefreshCw,
 } from 'lucide-react';
 
 interface ConfigPanelProps {
@@ -206,6 +207,19 @@ export const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 <div className="p-2 rounded-xl bg-slate-950 border border-slate-800 font-mono text-xs text-cyan-300">
                   {selectedStep.config.target_table || 'audit_logs'}
                 </div>
+              </div>
+            )}
+
+            {/* Retry Attempts Indicator */}
+            {stepRun && stepRun.attempt_count && stepRun.attempt_count > 1 && (
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  <span className="font-semibold">Retried</span>
+                  <span className="font-mono text-amber-200 ml-1">
+                    {stepRun.attempt_count} attempts before success
+                  </span>
+                </span>
               </div>
             )}
 
