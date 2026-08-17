@@ -16,9 +16,9 @@ export default async (req: Request, res: Response) => {
   let clientClosed = false
   try {
     await client.connect()
-
     const stepRunResult = await client.query(
-      `SELECT sr.id, sr.status, sr.workflow_run_id, ws.step_order, ws.type, wr.workflow_id
+      `SELECT sr.id, sr.status, sr.workflow_run_id, sr.approved_by, sr.second_approved_by,
+              ws.step_order, ws.type, ws.config, wr.workflow_id
        FROM step_runs sr
        JOIN workflow_steps ws ON ws.id = sr.step_id
        JOIN workflow_runs wr ON wr.id = sr.workflow_run_id
@@ -28,19 +28,22 @@ export default async (req: Request, res: Response) => {
     if (stepRunResult.rows.length === 0) {
       return res.status(400).json({ message: 'Step run not found' })
     }
-    const { status, workflow_run_id, step_order, type, workflow_id } = stepRunResult.rows[0]
+    const { status, workflow_run_id, step_order, type, config, workflow_id, approved_by, second_approved_by } = stepRunResult.rows[0]
 
-    // --- validate this is actually a paused approval_gate (was missing) ---
     if (type !== 'approval_gate') {
       return res.status(400).json({ message: 'This step is not an approval_gate' })
     }
-    if (status !== 'paused') {
+
+    const requiresTwoApprovals = !!(config && config.requires_second_approval)
+
+    // Must be paused OR (two-step gate awaiting its second approval)
+    const validStatus = status === 'paused' || (requiresTwoApprovals && status === 'awaiting_second_approval')
+    if (!validStatus) {
       return res.status(400).json({ message: `Step is not awaiting approval (current status: ${status})` })
     }
 
     const wfResult = await client.query(`SELECT org_id FROM workflows WHERE id = $1`, [workflow_id])
     const orgId = wfResult.rows[0].org_id
-
     const memberResult = await client.query(
       `SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2`,
       [orgId, userId]
@@ -53,15 +56,44 @@ export default async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Insufficient role to approve this step' })
     }
 
+    // --- Two-step approval flow ---
+    if (requiresTwoApprovals) {
+      if (status === 'paused') {
+        // First approval
+        await client.query(
+          `UPDATE step_runs SET status = 'awaiting_second_approval', approved_by = $1, approved_at = now() WHERE id = $2`,
+          [userId, step_run_id]
+        )
+        return res.status(200).json({
+          step_run_id,
+          workflow_run_id,
+          status: 'awaiting_second_approval',
+          message: 'First approval recorded. A second, different approver must confirm before the run resumes.'
+        })
+      }
+
+      if (status === 'awaiting_second_approval') {
+        if (approved_by === userId) {
+          return res.status(403).json({ message: 'A different approver must provide the second approval — you already gave the first.' })
+        }
+        await client.query(
+          `UPDATE step_runs SET status = 'completed', second_approved_by = $1, second_approved_at = now() WHERE id = $2`,
+          [userId, step_run_id]
+        )
+        await client.end()
+        clientClosed = true
+        const result = await resumeWorkflowAfterApproval(orgId, workflow_id, workflow_run_id, step_order + 1)
+        return res.status(result.status).json({ step_run_id, ...result.body })
+      }
+    }
+
+    // --- Standard single-approval flow (unchanged) ---
     await client.query(
       `UPDATE step_runs SET status = 'completed', approved_by = $1, approved_at = now() WHERE id = $2`,
       [userId, step_run_id]
     )
-
     await client.end()
     clientClosed = true
-
-    // actually resume execution from the next step (was missing)
     const result = await resumeWorkflowAfterApproval(orgId, workflow_id, workflow_run_id, step_order + 1)
     return res.status(result.status).json({ step_run_id, ...result.body })
   } catch (err: any) {
