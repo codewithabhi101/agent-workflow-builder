@@ -1,5 +1,5 @@
 import React from 'react';
-import { WorkflowStep, StepRun, StepStatus } from '../types';
+import { WorkflowStep, StepRun } from '../types';
 import { 
   Play, 
   CheckCircle2, 
@@ -12,7 +12,8 @@ import {
   GitFork, 
   UserCheck, 
   Database, 
-  Layers 
+  Layers,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface WorkflowCanvasProps {
@@ -49,7 +50,7 @@ export function WorkflowCanvas({
     }
   };
 
-  const getStatusBadge = (status?: StepStatus) => {
+  const getStatusBadge = (status?: string) => {
     switch (status) {
       case 'running':
         return (
@@ -70,6 +71,13 @@ export function WorkflowCanvas({
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-950/90 text-purple-200 border border-purple-500/50 shadow-sm shadow-purple-500/20">
             <ShieldAlert className="w-3.5 h-3.5 text-purple-300" />
             Paused (Review Required)
+          </span>
+        );
+      case 'awaiting_second_approval':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-950/90 text-amber-200 border border-amber-500/50 shadow-sm shadow-amber-500/20">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+            Awaiting 2nd Approval
           </span>
         );
       case 'failed':
@@ -103,6 +111,8 @@ export function WorkflowCanvas({
           const status = stepRun?.status;
           const isApprovalGate = step.step_type === 'approval_gate';
           const isPaused = status === 'paused';
+          const isAwaitingSecondApproval = status === 'awaiting_second_approval';
+          const needsAction = isPaused || isAwaitingSecondApproval;
 
           return (
             <React.Fragment key={step.id}>
@@ -111,8 +121,10 @@ export function WorkflowCanvas({
                 className={`w-full bg-slate-900/90 hover:bg-slate-900 border transition-all duration-200 rounded-2xl p-5 shadow-xl cursor-pointer relative backdrop-blur-md group ${
                   isSelected
                     ? 'border-indigo-500 ring-2 ring-indigo-500/30 shadow-indigo-500/10'
-                    : isPaused
-                    ? 'border-purple-500/80 ring-2 ring-purple-500/20'
+                    : needsAction
+                    ? isAwaitingSecondApproval
+                      ? 'border-amber-500/80 ring-2 ring-amber-500/20'
+                      : 'border-purple-500/80 ring-2 ring-purple-500/20'
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
@@ -143,15 +155,37 @@ export function WorkflowCanvas({
                 )}
 
                 {/* Human-in-the-loop Approval Action Card */}
-                {isApprovalGate && isPaused && (
-                  <div className="mt-4 p-4 rounded-xl bg-purple-950/40 border border-purple-600/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in zoom-in-95 duration-200">
+                {isApprovalGate && needsAction && (
+                  <div
+                    className={`mt-4 p-4 rounded-xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in zoom-in-95 duration-200 ${
+                      isAwaitingSecondApproval
+                        ? 'bg-amber-950/40 border-amber-600/40'
+                        : 'bg-purple-950/40 border-purple-600/40'
+                    }`}
+                  >
                     <div>
-                      <p className="text-xs font-semibold text-purple-200 flex items-center gap-1.5">
-                        <ShieldAlert className="w-4 h-4 text-purple-400" />
-                        Human Review Gate Triggered
+                      <p
+                        className={`text-xs font-semibold flex items-center gap-1.5 ${
+                          isAwaitingSecondApproval ? 'text-amber-200' : 'text-purple-200'
+                        }`}
+                      >
+                        {isAwaitingSecondApproval ? (
+                          <ShieldCheck className="w-4 h-4 text-amber-400" />
+                        ) : (
+                          <ShieldAlert className="w-4 h-4 text-purple-400" />
+                        )}
+                        {isAwaitingSecondApproval
+                          ? 'First Approval Recorded — Second Sign-off Required'
+                          : 'Human Review Gate Triggered'}
                       </p>
-                      <p className="text-[11px] text-purple-300/80 mt-0.5">
-                        Owner or Admin credentials required to authorize downstream write.
+                      <p
+                        className={`text-[11px] mt-0.5 ${
+                          isAwaitingSecondApproval ? 'text-amber-300/80' : 'text-purple-300/80'
+                        }`}
+                      >
+                        {isAwaitingSecondApproval
+                          ? 'A different owner/editor must confirm before this run resumes.'
+                          : 'Owner or Admin credentials required to authorize downstream write.'}
                       </p>
                     </div>
                     <button
@@ -159,9 +193,13 @@ export function WorkflowCanvas({
                         e.stopPropagation();
                         onApproveStep(step.id);
                       }}
-                      className="w-full sm:w-auto px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/60 transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap"
+                      className={`w-full sm:w-auto px-4 py-2 rounded-lg text-white text-xs font-bold shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer whitespace-nowrap ${
+                        isAwaitingSecondApproval
+                          ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-950/60'
+                          : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-950/60'
+                      }`}
                     >
-                      Approve & Resume
+                      {isAwaitingSecondApproval ? 'Confirm 2nd Approval' : 'Approve & Resume'}
                     </button>
                   </div>
                 )}
