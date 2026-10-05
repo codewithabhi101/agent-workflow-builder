@@ -9,16 +9,12 @@ import { RunsUsageView } from './components/RunsUsageView';
 import { MobileDrawer } from './components/MobileDrawer';
 import { BottomExecutionStrip } from './components/BottomExecutionStrip';
 import { X, Lock, Terminal } from 'lucide-react';
-import { isAuthenticated as checkAuth, getCurrentUser } from './nhost';
-import Login from './Login';
 
 export default function App() {
   const [workflow, setWorkflow] = useState<Workflow>(INITIAL_WORKFLOW);
   const [selectedStep, setSelectedStep] = useState<WorkflowStep | null>(workflow.steps[1]);
   const [activeOrg, setActiveOrg] = useState<string>('org_acme_corp');
   const [activeUserId, setActiveUserId] = useState<string>('usr_owner_acme');
-  const [isAuthenticated, setIsAuthenticated] = useState(checkAuth());
-  const [checkingAuth, setCheckingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState<ActiveTab>('canvas');
   const [activeRunStatus, setActiveRunStatus] = useState<StepStatus | 'idle'>('idle');
   const [stepRuns, setStepRuns] = useState<Record<string, StepRun>>({});
@@ -70,14 +66,6 @@ export default function App() {
       }
     };
   }, [activeOrg]);
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (user) {
-      setActiveUserId(user.id);
-    }
-    setCheckingAuth(false);
-  }, []);
 
   // Subscribe to live SSE updates for an active workflow run
   const subscribeToRunStream = (runId: string) => {
@@ -412,18 +400,6 @@ export default function App() {
     setActiveUserId(user);
     setAccessDeniedMessage(null);
   };
-
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen w-screen flex items-center justify-center bg-slate-950 text-slate-400 text-sm">
-        Loading...
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Login onLoggedIn={() => setIsAuthenticated(true)} />;
-  }
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
