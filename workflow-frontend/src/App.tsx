@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { INITIAL_WORKFLOW, INITIAL_RUN_HISTORY } from './data';
 import { Workflow, WorkflowStep, StepRun, StepStatus, ActiveTab, ExecutionRunRecord } from './types';
 import { NodeLibrary } from './components/NodeLibrary';
